@@ -1,0 +1,1020 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>全身重心 3D模型</title>
+<style>[hidden]{display:none!important}:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}</style>
+</head>
+<body>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@700&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: 計測機器の画面。左に3Dビュー（主役）、右に操作盤（姿勢／データ／数値／根拠）。下に時系列。狭幅では縦一列 */
+:root{
+  --bg:#E9ECEB; --panel:#F6F7F6; --fg:#16201E; --muted:#56635F; --line:#C5CCC9;
+  --accent:#C2410C;     /* 全身重心 */
+  --xcom:#7C3AED;       /* 外挿重心 */
+  --bos:#0F766E;        /* 支持基底面 */
+  --body:#8A9894;       /* 体節 */
+  --segcm:#2B3A37;
+  --floor:#D3D9D6; --grid:#BCC4C1; --view:#F1F3F2;
+  --good:#15803D; --bad:#B91C1C;
+  --chip-s:#D6E7E4; --chip-m:#ECE3CF; --chip-i:#EBD9D9;
+  --f-disp:"Shippori Mincho B1","Hiragino Mincho ProN","Yu Mincho",serif;
+  --f-body:"Zen Kaku Gothic New","Hiragino Sans","Yu Gothic",system-ui,sans-serif;
+  --f-num:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0E1312; --panel:#151C1B; --fg:#E1E7E5; --muted:#93A19C; --line:#2A3533;
+  --accent:#FB923C; --xcom:#A78BFA; --bos:#2DD4BF; --body:#6E7D79; --segcm:#CBD5D2;
+  --floor:#1A2321; --grid:#26312F; --view:#121918; --good:#4ADE80; --bad:#F87171;
+  --chip-s:#1C3330; --chip-m:#352E1D; --chip-i:#3A2424; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0E1312; --panel:#151C1B; --fg:#E1E7E5; --muted:#93A19C; --line:#2A3533;
+  --accent:#FB923C; --xcom:#A78BFA; --bos:#2DD4BF; --body:#6E7D79; --segcm:#CBD5D2;
+  --floor:#1A2321; --grid:#26312F; --view:#121918; --good:#4ADE80; --bad:#F87171;
+  --chip-s:#1C3330; --chip-m:#352E1D; --chip-i:#3A2424; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:14px;line-height:1.6;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px 40px}
+.wrap{max-width:1320px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+header{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 18px}
+h1{font-family:var(--f-disp);font-size:clamp(22px,3.4vw,30px);margin:0;letter-spacing:.04em}
+.sub{color:var(--muted);font-size:13px}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.chip{display:inline-block;font-size:11px;letter-spacing:.05em;padding:0 6px;border-radius:3px;line-height:1.7;white-space:nowrap;vertical-align:1px}
+.cs{background:var(--chip-s)}.cm{background:var(--chip-m)}.ci{background:var(--chip-i)}
+.main{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:14px;align-items:start}
+@media (max-width:980px){.main{grid-template-columns:minmax(0,1fr)}}
+.view{position:relative;background:var(--view);border:1px solid var(--line);border-radius:6px;overflow:hidden;height:min(68vh,640px);min-height:360px}
+.view canvas{display:block;width:100%;height:100%;touch-action:none}
+.hud{position:absolute;left:10px;top:10px;display:flex;flex-direction:column;gap:2px;font-size:12px;background:color-mix(in srgb,var(--panel) 86%,transparent);padding:8px 10px;border-radius:5px;border:1px solid var(--line);pointer-events:none;max-width:calc(100% - 20px)}
+.hud b{font-weight:700}
+.cams{position:absolute;right:10px;top:10px;display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+.cams button,.btn{font:inherit;font-size:12.5px;padding:4px 9px;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:4px;cursor:pointer}
+.btn:hover,.cams button:hover{border-color:var(--accent)}
+.cams button.on,.btn.on{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.btn:disabled{opacity:.45;cursor:default}
+.legend3d{position:absolute;left:10px;bottom:10px;display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;background:color-mix(in srgb,var(--panel) 86%,transparent);padding:6px 10px;border-radius:5px;border:1px solid var(--line)}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+.side{background:var(--panel);border:1px solid var(--line);border-radius:6px;display:flex;flex-direction:column;min-width:0;max-height:none}
+.tabs{display:flex;border-bottom:1px solid var(--line)}
+.tabs button{flex:1;font:inherit;font-size:13.5px;padding:9px 4px;background:none;border:0;border-bottom:3px solid transparent;color:var(--muted);cursor:pointer}
+.tabs button[aria-selected=true]{color:var(--fg);border-bottom-color:var(--accent);font-weight:700}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.pane>*{flex-shrink:0}
+.pane{padding:12px 14px;display:flex;flex-direction:column;gap:12px;overflow:auto;max-height:min(78vh,760px)}
+@media (max-width:980px){.pane{max-height:none}}
+fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+legend{font-size:11.5px;letter-spacing:.08em;color:var(--muted);margin-bottom:2px;padding:0}
+.sl{display:grid;grid-template-columns:7.5em minmax(0,1fr) 4.2em;gap:6px;align-items:center;font-size:13px}
+.sl input{width:100%;accent-color:var(--accent)}
+.sl output{text-align:right}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.form{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 10px;align-items:center;font-size:13px}
+.form input,.form select{font:inherit;font-size:13px;padding:3px 6px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--fg);min-width:0;width:100%}
+.msg{font-size:12.5px;padding:6px 8px;border-radius:4px;background:var(--bg);border:1px solid var(--line)}
+.msg.err{border-color:var(--bad);color:var(--bad)}
+.kv{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 10px;font-size:13px}
+.kv dt{color:var(--muted)}.kv dd{margin:0;text-align:right}
+h3{margin:0;font-size:13px;letter-spacing:.04em}
+.note{font-size:12.5px;color:var(--muted);display:flex;flex-direction:column;gap:6px}
+.note p{margin:0}
+table{border-collapse:collapse;width:100%;font-size:12px}
+th,td{padding:4px 5px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:500}
+td.r,th.r{text-align:right}
+.tblw{overflow-x:auto}
+pre{font-family:var(--f-num);font-size:11.5px;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:8px;overflow-x:auto;margin:0;white-space:pre}
+.timeline{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.tl-top{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+.tl-top input[type=range]{flex:1;min-width:160px;accent-color:var(--accent)}
+#chart{width:100%;height:230px;display:block;cursor:crosshair}
+.src{font-size:12px;color:var(--muted);display:flex;flex-direction:column;gap:3px;word-break:break-all}
+a{color:var(--bos)}
+</style>
+
+<div class="wrap">
+<header>
+  <h1>全身重心 3D模型</h1>
+  <span class="sub">枠組み：西洋的運動学（剛体リンク・体節慣性パラメータ・倒立振子）。氣は含まない。</span>
+</header>
+
+<div class="main">
+  <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+    <div class="view" id="view">
+      <div class="hud" id="hud"></div>
+      <div class="cams" role="group" aria-label="視点">
+        <button data-cam="front">正面</button><button data-cam="side">側面</button><button data-cam="top">真上</button><button data-cam="persp">斜め</button><button id="follow" aria-pressed="false">重心を追う</button>
+      </div>
+      <div class="legend3d">
+        <span><i class="dot" style="background:var(--accent)"></i>全身重心と鉛直線</span>
+        <span><i class="dot" style="background:var(--xcom)"></i>外挿重心 XcoM</span>
+        <span><i class="dot" style="background:var(--bos)"></i>支持基底面</span>
+        <span><i class="dot" style="background:var(--segcm)"></i>体節重心（大きさ∝質量）</span>
+      </div>
+    </div>
+    <div class="timeline" id="timeline">
+      <div class="tl-top">
+        <div class="row">
+          <button class="btn" id="play">▶ 再生</button>
+          <select id="speed" class="btn" aria-label="再生速度"><option value="0.25">×0.25</option><option value="0.5">×0.5</option><option value="1" selected>×1</option></select>
+          <span class="num" id="tlab"></span>
+        </div>
+        <input type="range" id="scrub" min="0" max="0" value="0" aria-label="フレーム">
+      </div>
+      <canvas id="chart" aria-label="時系列グラフ"></canvas>
+      <div class="sub" id="tlnote"></div>
+    </div>
+  </div>
+
+  <aside class="side">
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" data-p="pose">姿勢</button>
+      <button role="tab" aria-selected="false" data-p="data">データ</button>
+      <button role="tab" aria-selected="false" data-p="nums">数値</button>
+      <button role="tab" aria-selected="false" data-p="basis">根拠</button>
+    </div>
+
+    <div class="pane" id="p-pose">
+      <div class="form">
+        <label for="sex">体節表</label><select id="sex"><option value="male">男性（de Leva 1996）</option><option value="female">女性（de Leva 1996）</option></select>
+        <label for="H">身長 m</label><input id="H" type="number" step="0.01" min="1.2" max="2.2" value="1.70">
+        <label for="M">体重 kg</label><input id="M" type="number" step="0.5" min="20" max="200" value="65">
+      </div>
+      <div class="msg" id="modeMsg"></div>
+      <div class="row" id="presets"></div>
+      <div id="sliders" style="display:flex;flex-direction:column;gap:12px"></div>
+    </div>
+
+    <div class="pane" id="p-data" hidden>
+      <h3>歩行デモ（仮置き・指導者の確認待ち）</h3>
+      <div class="row"><button class="btn" id="gNami">① なみあしの歩き方</button><button class="btn" id="gNorm">② 普通の歩き方</button></div>
+      <p class="note" style="margin:0">本模型で生成した合成の歩行。実測ではない。速さ・歩幅・歩調は両者で同じにして、違いを下の表の項目だけに絞っている。値は書き換えて生成し直せる。</p>
+      <div class="tblw"><table id="gtbl"></table></div>
+      <h3>見本データ（本模型で生成した合成データ）</h3>
+      <div class="row" id="samples"></div>
+      <h3>実測データを読み込む</h3>
+      <input type="file" id="file" accept=".csv,.tsv,.txt" aria-label="CSVファイル">
+      <div class="form">
+        <label for="up">上向きの軸</label><select id="up"><option value="+y">+Y</option><option value="-y">−Y（画像座標系に多い）</option><option value="+z">+Z（モーションキャプチャに多い）</option></select>
+        <label for="unit">単位</label><select id="unit"><option value="m">m</option><option value="mm">mm</option></select>
+        <label for="fsIn">標本化周波数 Hz</label><input id="fsIn" type="number" min="1" max="2000" step="1" value="30">
+        <label for="fc">遮断周波数 Hz</label><input id="fc" type="number" min="0" max="50" step="0.5" value="6">
+        <label for="thr">接地の閾値 cm</label><input id="thr" type="number" min="0.2" max="10" step="0.1" value="3">
+        <label for="floor">床の高さ</label><select id="floor"><option value="auto">自動</option><option value="global">全フレームの最下点</option><option value="frame">フレームごとの最下点</option></select>
+        <label for="anchor">足接地アンカー</label><select id="anchor"><option value="auto">自動</option><option value="on">使う</option><option value="off">使わない</option></select>
+        <label for="lap">振子長 前後 m</label><input id="lap" type="number" step="0.01" placeholder="自動（1.24×股関節高）">
+        <label for="lml">振子長 左右 m</label><input id="lml" type="number" step="0.01" placeholder="自動（1.34×股関節高）">
+      </div>
+      <button class="btn" id="reanalyze">設定を反映して再計算</button>
+      <div class="msg" id="dataMsg">CSV を選ぶと、ここに読み込み結果が出ます。</div>
+      <h3>CSV の形</h3>
+      <p class="note" style="margin:0">1行目に列名。時間列（time、秒）は任意。関節は「名前_x, 名前_y, 名前_z」。名前は MediaPipe Pose の英語名（left_shoulder など）か番号（x11, 11_x など）。必須は両側の肩・肘・手首・股・膝・足首・踵・つま先（foot_index）。耳・人差し指・小指があれば頭と手の近似に使う。</p>
+      <pre id="tmpl"></pre>
+      <button class="btn" id="copyTmpl">列名の見本をコピー</button>
+    </div>
+
+    <div class="pane" id="p-nums" hidden>
+      <dl class="kv" id="kv"></dl>
+      <h3>歩行デモの比較</h3>
+      <div class="tblw"><table id="cmp"><tr><td class="sub">① と ② を生成すると、ここに並べて出ます。</td></tr></table></div>
+      <h3>体節ごとの重心</h3>
+      <div class="tblw"><table id="segtbl"></table></div>
+      <button class="btn" id="copyCsv">全フレームの計算結果をCSVでコピー</button>
+      <div class="msg" id="copyMsg" hidden></div>
+    </div>
+
+    <div class="pane" id="p-basis" hidden>
+      <h3>1. 全身重心</h3>
+      <p class="note" style="margin:0">各体節の重心 <span class="num">p<sub>i</sub> = 起点 + c<sub>i</sub>(終点 − 起点)</span>、全身重心 <span class="num">CoM = Σ m<sub>i</sub>p<sub>i</sub> / Σ m<sub>i</sub></span>。14体節。<span class="chip cs">検索</span>m と c は de Leva（1996）表4。下の表は選択中の体節表。</p>
+      <div class="tblw"><table id="dltbl"></table></div>
+      <h3>2. 支持基底面と静的余裕</h3>
+      <p class="note" style="margin:0">接地している足の輪郭点の凸包を支持基底面（BoS）とする。重心の床投影から BoS 境界までの最短距離を、内側を正として「静的余裕」と呼ぶ（本模型の定義）。</p>
+      <h3>3. 外挿重心と安定余裕（MoS）</h3>
+      <p class="note" style="margin:0"><span class="chip cs">検索</span>Hof ら（2005）：<span class="num">XcoM = x + v/ω₀</span>、<span class="num">ω₀ = √(g/l)</span>、<span class="num">MoS = BoS − XcoM</span>。l は有効振子長で、前後方向 ≈ 1.24 × 大転子高、左右方向 ≈ 1.34 × 大転子高（Curtze ら 2023 の整理）。本模型は大転子高を股関節中心の高さで代用し、骨盤の向きで前後・左右に分けて XcoM を求める。<span class="chip ci">推論</span>代用による誤差は数 cm 程度の振子長の差になる。</p>
+      <p class="note" style="margin:0">MoS の数値は二通り出す。①XcoM から BoS 境界までの符号付き最短距離（2次元）。②方向別：BoS のその方向の最も外の点と XcoM の差（前・後・左・右）。<span class="chip cs">検索</span>Hof の原定義は方向別。立位では実効的な BoS は物理的 BoS の約3分の1とされ、歩行中の前後 MoS は常に負になる。MoS は瞬間の力学量で、転倒リスクの総合指標ではない（Curtze ら 2023）。</p>
+      <h3>4. 左右の荷重比</h3>
+      <p class="note" style="margin:0"><span class="chip ci">推論</span>両足接地のとき、重心の床投影を「両足の接地中心を結ぶ線分」に射影し、てこの比で分ける。静的・剛体を仮定した近似で、床反力計の値ではない。片足接地なら 100／0。</p>
+      <h3>5. 平滑化と速度</h3>
+      <p class="note" style="margin:0"><span class="chip cm">設定</span>2次バターワース低域通過を前後二回かける（位相ゼロ、合成4次相当）。遮断周波数の既定 6 Hz は作者の設定で、補正係数はかけていない。<span class="chip cs">検索</span>文献では残差分析（Winter 1990）で決め、体幹は低め、足は高めにする例がある。速度は中心差分。</p>
+      <h3>6. 角度</h3>
+      <p class="note" style="margin:0">数値画面の角度は二本の線のなす角（膝・肘・股関節・体幹の傾き）。<span class="chip cs">検索</span>ISB の関節座標系（Wu ら 2002）ではない。論文で関節角を報告するなら ISB 準拠の計算が別に要る。</p>
+      <h3>7. 作者が置いた値（模型の形）</h3>
+      <div class="tblw"><table id="settbl"></table></div>
+      <h3>8. 実測データの近似</h3>
+      <p class="note" style="margin:0"><span class="chip ci">推論</span>MediaPipe の点は皮膚や外形からの推定で、関節中心ではない。頭は両耳の中点、手は人差し指と小指の点の中点で近似する。腰中心の座標で出るデータは、重心の対地速度が分からないので「足接地アンカー」（接地足が滑らないと仮定して全体を平行移動）で補う。</p>
+      <p class="note" style="margin:0"><span class="chip cs">検索</span>MediaPipe の world 座標は「メートル単位、両股関節の中点が原点」。軸の向きは公式文書に明記がなかった。<span class="chip ci">推論</span>画像座標と同じく y が下向きの可能性が高いが未確認。読み込み後に人が逆さなら「上向きの軸」を変える。</p>
+      <div class="src">
+        <b style="color:var(--fg)">出典（検索で確認）</b>
+        <span>de Leva P (1996) J Biomech 29:1223–1230：<a href="https://ebm.ufabc.edu.br/wp-content/uploads/2013/12/Leva-1996.pdf" target="_blank" rel="noopener">PDF</a>。照合に <a href="https://exrx.net/Kinesiology/Segments" target="_blank" rel="noopener">ExRx</a>、<a href="https://simtk.org/docman/view.php/199/632/handwrittenPartLabHumanBodySegment.pdf" target="_blank" rel="noopener">SimTK 教材（女性値）</a></span>
+        <span>Hof AL ほか (2005) J Biomech 38:1–8。定義の整理：<a href="https://cris.maastrichtuniversity.nl/files/177130543/Notes_on_the_margin_of_stability_2023_Curtze_Buurke_McCrum_Preprint_v2.pdf" target="_blank" rel="noopener">Curtze, Buurke, McCrum (2023) Notes on the margin of stability</a></span>
+        <span>ISB 関節座標系：<a href="https://www.ece.uvic.ca/~bctill/papers/mocap/Wu_etal_2002.pdf" target="_blank" rel="noopener">Wu ほか (2002)</a></span>
+        <span>MediaPipe Pose：<a href="https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker" target="_blank" rel="noopener">Pose Landmarker</a>、<a href="https://github.com/google-ai-edge/mediapipe/blob/master/docs/solutions/pose.md" target="_blank" rel="noopener">pose.md</a></span>
+        <span>遮断周波数の議論：<a href="https://clinicalgaitanalysis.com/faq/cutoff.html" target="_blank" rel="noopener">Clinical Gait Analysis FAQ</a></span>
+      </div>
+    </div>
+  </aside>
+</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+/* 全身重心3D模型 — 計算部（描画から独立。Node でも検証できる） */
+var Core = (function(){
+'use strict';
+/* ---- de Leva (1996) J Biomech 29:1223-1230, Table 4 ----
+   m: 体重比(%)、c: 体節重心の位置（起点からの% / 体節長）、L: 平均体節長(mm)
+   起点 → 終点。head: VERT→CERV, trunk: MIDS→MIDH, shank: KJC→AJC は代替端点の行 */
+var DL = {
+  male:   { stature:1741, mass:73.0, seg:{
+    head:{m:6.94, c:50.02, L:242.9, ends:'VERT → CERV（頭頂 → 第7頸椎）'},
+    trunk:{m:43.46,c:43.10, L:515.5, ends:'MIDS → MIDH（両肩関節中心の中点 → 両股関節中心の中点）'},
+    uarm:{m:2.71, c:57.72, L:281.7, ends:'SJC → EJC（肩関節中心 → 肘関節中心）'},
+    farm:{m:1.62, c:45.74, L:268.9, ends:'EJC → WJC（肘関節中心 → 手関節中心）'},
+    hand:{m:0.61, c:79.00, L:86.2,  ends:'WJC → MET3（手関節中心 → 第3中手骨頭）'},
+    thigh:{m:14.16,c:40.95, L:422.2, ends:'HJC → KJC（股関節中心 → 膝関節中心）'},
+    shank:{m:4.33, c:43.95, L:440.3, ends:'KJC → AJC（膝関節中心 → 足関節中心）'},
+    foot:{m:1.37, c:44.15, L:258.1, ends:'HEEL → TTIP（踵 → つま先）'} }},
+  female: { stature:1735, mass:61.9, seg:{
+    head:{m:6.68, c:48.41, L:243.7, ends:'VERT → CERV'},
+    trunk:{m:42.57,c:37.82, L:497.9, ends:'MIDS → MIDH'},
+    uarm:{m:2.55, c:57.54, L:275.1, ends:'SJC → EJC'},
+    farm:{m:1.38, c:45.59, L:264.3, ends:'EJC → WJC'},
+    hand:{m:0.56, c:74.74, L:78.0,  ends:'WJC → MET3'},
+    thigh:{m:14.78,c:36.12, L:368.5, ends:'HJC → KJC'},
+    shank:{m:4.81, c:43.52, L:438.6, ends:'KJC → AJC'},
+    foot:{m:1.29, c:40.14, L:228.3, ends:'HEEL → TTIP'} }}
+};
+var SEG_JP = {head:'頭頸部',trunk:'体幹',uarm:'上腕',farm:'前腕',hand:'手',thigh:'大腿',shank:'下腿',foot:'足'};
+
+/* ---- 作者の設定値（形を作るためだけの寸法。身長比） ---- */
+var SET = { ankleH:0.039, hipHalf:0.048, shHalf:0.100, cervUp:0.030,
+  heelBack:0.22, heelW:0.25, foreW:0.38, mtPos:0.72 };
+
+/* ---- vector / matrix ---- */
+function add(a,b){return [a[0]+b[0],a[1]+b[1],a[2]+b[2]];}
+function sub(a,b){return [a[0]-b[0],a[1]-b[1],a[2]-b[2]];}
+function mul(a,s){return [a[0]*s,a[1]*s,a[2]*s];}
+function dot(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];}
+function cross(a,b){return [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]];}
+function len(a){return Math.sqrt(dot(a,a));}
+function norm(a){var l=len(a)||1;return [a[0]/l,a[1]/l,a[2]/l];}
+function lerp(a,b,t){return add(a,mul(sub(b,a),t));}
+function mid(a,b){return lerp(a,b,0.5);}
+function rotAxis(v,k,th){var c=Math.cos(th),s=Math.sin(th),kv=cross(k,v),kd=dot(k,v);
+  return [v[0]*c+kv[0]*s+k[0]*kd*(1-c), v[1]*c+kv[1]*s+k[1]*kd*(1-c), v[2]*c+kv[2]*s+k[2]*kd*(1-c)];}
+var D=Math.PI/180;
+function Rx(t){var c=Math.cos(t),s=Math.sin(t);return [[1,0,0],[0,c,-s],[0,s,c]];}
+function Ry(t){var c=Math.cos(t),s=Math.sin(t);return [[c,0,s],[0,1,0],[-s,0,c]];}
+function Rz(t){var c=Math.cos(t),s=Math.sin(t);return [[c,-s,0],[s,c,0],[0,0,1]];}
+function mm(A,B){var C=[[0,0,0],[0,0,0],[0,0,0]];for(var i=0;i<3;i++)for(var j=0;j<3;j++)for(var k=0;k<3;k++)C[i][j]+=A[i][k]*B[k][j];return C;}
+function mv(A,v){return [A[0][0]*v[0]+A[0][1]*v[1]+A[0][2]*v[2],A[1][0]*v[0]+A[1][1]*v[1]+A[1][2]*v[2],A[2][0]*v[0]+A[2][1]*v[1]+A[2][2]*v[2]];}
+
+/* 座標系：x＝本人の左、y＝上、z＝前（単位 m） */
+
+function makeBody(sex,H,M){
+  var t=DL[sex], s=H/(t.stature/1000), L={};
+  for(var k in t.seg) L[k]=t.seg[k].L/1000*s;
+  return {sex:sex,H:H,M:M,L:L,ankleH:SET.ankleH*H,hipHalf:SET.hipHalf*H,shHalf:SET.shHalf*H,cervUp:SET.cervUp*H};
+}
+
+var P0 = {stanceW:0.20, footLz:0, footRz:0, toeOut:10, liftL:0, liftR:0,
+  pelvX:0, pelvZ:0, pelvDrop:0, pelvYaw:0, pelvTilt:0, pelvObl:0,
+  trunkFlex:0, trunkSide:0, trunkRot:0, neckFlex:0,
+  shFlexL:0, shFlexR:0, shAbdL:8, shAbdR:8, elbL:10, elbR:10};
+
+function footGeom(ankleProj, dir, lift, footLen){
+  var p=[dir[2],0,-dir[0]]; // 足の左方向（dir が前のとき）
+  var heel=add(sub(ankleProj,mul(dir,SET.heelBack*footLen)),[0,lift,0]);
+  var toe=add(heel,mul(dir,footLen));
+  return {heel:heel,toe:toe,dir:dir,poly:footPoly(heel,toe)};
+}
+function footPoly(heel,toe){
+  var f=sub(toe,heel); f=[f[0],0,f[2]]; var Lf=len(f)||1e-6, d=mul(f,1/Lf), p=[d[2],0,-d[0]];
+  var y=Math.min(heel[1],toe[1]);
+  var h=add(heel,mul(d,0.05*Lf)), m=add(heel,mul(d,SET.mtPos*Lf));
+  var pitch=Math.atan2(heel[1]-toe[1],Lf)/D, pts;
+  if(pitch>8){ // 踵が上がっている：前足部だけで支える
+    pts=[add(m,mul(p,SET.foreW*Lf/2)), toe.slice(), add(m,mul(p,-SET.foreW*Lf/2))];
+  } else if(pitch<-8){ // つま先が上がっている：踵だけで支える
+    var q2=add(heel,mul(d,0.30*Lf));
+    pts=[add(h,mul(p,SET.heelW*Lf/2)), add(q2,mul(p,SET.heelW*Lf/2)), add(q2,mul(p,-SET.heelW*Lf/2)), add(h,mul(p,-SET.heelW*Lf/2))];
+  } else
+    pts=[add(h,mul(p,SET.heelW*Lf/2)), add(m,mul(p,SET.foreW*Lf/2)), toe.slice(), add(m,mul(p,-SET.foreW*Lf/2)), add(h,mul(p,-SET.heelW*Lf/2))];
+  return pts.map(function(q){return [q[0],y,q[2]];});
+}
+
+function legIK(H,A,L1,L2,hint){
+  var dv=sub(A,H), d=len(dv), u=norm(dv), reach=true;
+  var maxd=(L1+L2)*0.99999;
+  if(d>maxd){reach=false; d=maxd; A=add(H,mul(u,d));}
+  var n=sub(hint,mul(u,dot(hint,u))); n=norm(n);
+  var a=(L1*L1-L2*L2+d*d)/(2*d), h=Math.sqrt(Math.max(0,L1*L1-a*a));
+  return {K:add(add(H,mul(u,a)),mul(n,h)),A:A,reach:reach};
+}
+
+/* 手動姿勢 → 関節座標 */
+function buildPose(P,B){
+  var L=B.L, J={};
+  var h0=B.ankleH+(L.shank+L.thigh)*0.995;
+  var Rp=mm(Ry(P.pelvYaw*D),mm(Rx(P.pelvTilt*D),Rz(P.pelvObl*D)));
+  J.MIDH=[P.pelvX,h0-P.pelvDrop,P.pelvZ];
+  J.HJC_L=add(J.MIDH,mv(Rp,[B.hipHalf,0,0])); J.HJC_R=add(J.MIDH,mv(Rp,[-B.hipHalf,0,0]));
+  var Rt=mm(Rp,mm(Ry(P.trunkRot*D),mm(Rx(P.trunkFlex*D),Rz(-P.trunkSide*D))));
+  J.MIDS=add(J.MIDH,mv(Rt,[0,L.trunk,0]));
+  J.CERV=add(J.MIDS,mv(Rt,[0,B.cervUp,0]));
+  var Rh=mm(Rt,Rx(P.neckFlex*D));
+  J.VERT=add(J.CERV,mv(Rh,[0,L.head,0]));
+  ['L','R'].forEach(function(s){
+    var sg=s==='L'?1:-1;
+    J['SJC_'+s]=add(J.MIDS,mv(Rt,[sg*B.shHalf,0,0]));
+    var Ra=mm(Rt,mm(Rx(-P['shFlex'+s]*D),Rz(sg*P['shAbd'+s]*D)));
+    var ud=mv(Ra,[0,-1,0]), ax=mv(Ra,[1,0,0]);
+    J['EJC_'+s]=add(J['SJC_'+s],mul(ud,L.uarm));
+    var fd=rotAxis(ud,ax,-P['elb'+s]*D);
+    J['WJC_'+s]=add(J['EJC_'+s],mul(fd,L.farm));
+    J['MET3_'+s]=add(J['WJC_'+s],mul(fd,L.hand));
+  });
+  var feet={}, reach={};
+  ['L','R'].forEach(function(s){
+    var sg=s==='L'?1:-1;
+    var dir=mv(Ry(sg*P.toeOut*D),[0,0,1]);
+    var lift=P['lift'+s], ap=[sg*P.stanceW/2,0,P['foot'+s+'z']];
+    var A=[ap[0],B.ankleH+lift,ap[2]], Hj=J['HJC_'+s], maxR=(L.thigh+L.shank)*0.99999;
+    var heel=add(sub(ap,mul(dir,SET.heelBack*L.foot)),[0,lift,0]), toe=add(heel,mul(dir,L.foot));
+    // 足が届かないときは、つま先（後ろの足）か踵（前の足）を支点に足を傾ける
+    if(len(sub(A,Hj))>maxR){
+      var behind=dot(sub(Hj,A),dir)>0, piv=behind?toe:heel, px=[dir[2],0,-dir[0]], sgn=behind?1:-1, thMax=(behind?55:25)*D;
+      var at=function(th,q){return add(piv,rotAxis(sub(q,piv),px,sgn*th));};
+      var lo=0,hi=thMax;
+      if(len(sub(at(hi,A),Hj))<=maxR){for(var it=0;it<30;it++){var md=(lo+hi)/2; if(len(sub(at(md,A),Hj))<=maxR) hi=md; else lo=md;}}
+      A=at(hi,A); heel=at(hi,heel); toe=at(hi,toe);
+    }
+    var hint=norm(add(dir,mv(Rp,[0,0,1])));
+    var ik=legIK(Hj,A,L.thigh,L.shank,hint);
+    var shift=sub(ik.A,A);
+    J['KJC_'+s]=ik.K; J['AJC_'+s]=ik.A; reach[s]=ik.reach;
+    J['HEEL_'+s]=add(heel,shift); J['TTIP_'+s]=add(toe,shift);
+  });
+  return {J:J,reach:reach};
+}
+
+/* 体節重心と全身重心 */
+var SEGS=[['head','VERT','CERV'],['trunk','MIDS','MIDH'],
+ ['uarm','SJC_L','EJC_L','L'],['farm','EJC_L','WJC_L','L'],['hand','WJC_L','MET3_L','L'],
+ ['uarm','SJC_R','EJC_R','R'],['farm','EJC_R','WJC_R','R'],['hand','WJC_R','MET3_R','R'],
+ ['thigh','HJC_L','KJC_L','L'],['shank','KJC_L','AJC_L','L'],['foot','HEEL_L','TTIP_L','L'],
+ ['thigh','HJC_R','KJC_R','R'],['shank','KJC_R','AJC_R','R'],['foot','HEEL_R','TTIP_R','R']];
+function computeCOM(J,sex,M){
+  var t=DL[sex].seg, segs=[], sm=0, acc=[0,0,0];
+  SEGS.forEach(function(s){
+    var p, k=s[0], par=t[k];
+    if(k==='head' && !(J.VERT&&J.CERV)) p=J.headCM;
+    else p=lerp(J[s[1]],J[s[2]],par.c/100);
+    segs.push({k:k,side:s[3]||'',p:p,m:par.m,a:J[s[1]]||p,b:J[s[2]]||p});
+    acc=add(acc,mul(p,par.m)); sm+=par.m;
+  });
+  return {com:mul(acc,1/sm),segs:segs,sumPct:sm,mass:M};
+}
+
+/* 2D (x,z) 凸包と距離 */
+function hull(pts){
+  var P=pts.map(function(p){return [p[0],p[2]];}).sort(function(a,b){return a[0]-b[0]||a[1]-b[1];});
+  if(P.length<3) return P;
+  function cr(o,a,b){return (a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);}
+  var lo=[],up=[];
+  P.forEach(function(p){while(lo.length>=2&&cr(lo[lo.length-2],lo[lo.length-1],p)<=0)lo.pop();lo.push(p);});
+  for(var i=P.length-1;i>=0;i--){var p=P[i];while(up.length>=2&&cr(up[up.length-2],up[up.length-1],p)<=0)up.pop();up.push(p);}
+  up.pop();lo.pop();return lo.concat(up); // 反時計回り（x右・z上の平面で）
+}
+function area(h){if(h.length<3)return 0;var s=0;for(var i=0;i<h.length;i++){var a=h[i],b=h[(i+1)%h.length];s+=a[0]*b[1]-b[0]*a[1];}return Math.abs(s)/2;}
+function segDist(p,a,b){var dx=b[0]-a[0],dz=b[1]-a[1],L2=dx*dx+dz*dz,t=L2?((p[0]-a[0])*dx+(p[1]-a[1])*dz)/L2:0;t=Math.max(0,Math.min(1,t));var x=a[0]+t*dx-p[0],z=a[1]+t*dz-p[1];return Math.sqrt(x*x+z*z);}
+function signedDist(p,h){ // 内側＝正
+  if(!h.length) return null;
+  if(h.length===1) return -Math.hypot(p[0]-h[0][0],p[1]-h[0][1]);
+  var dmin=Infinity, inside=h.length>=3;
+  for(var i=0;i<h.length;i++){var a=h[i],b=h[(i+1)%h.length];
+    if(h.length===2&&i===1)break;
+    dmin=Math.min(dmin,segDist(p,a,b));
+    if(h.length>=3){var c=(b[0]-a[0])*(p[1]-a[1])-(b[1]-a[1])*(p[0]-a[0]); if(c<0) inside=false;}}
+  return inside?dmin:-dmin;
+}
+function support(h,d){var m=-Infinity;h.forEach(function(q){m=Math.max(m,q[0]*d[0]+q[1]*d[1]);});return m;}
+
+/* バターワース低域通過（2次・前後二回＝位相ゼロ） */
+function bw2(fc,fs){var K=Math.tan(Math.PI*fc/fs),q=Math.SQRT2,n=1/(1+q*K+K*K);
+  return {b0:K*K*n,b1:2*K*K*n,b2:K*K*n,a1:2*(K*K-1)*n,a2:(1-q*K+K*K)*n};}
+function lfilter(c,x){var y=new Array(x.length),x1=x[0],x2=x[0],y1=x[0],y2=x[0];
+  for(var i=0;i<x.length;i++){var v=c.b0*x[i]+c.b1*x1+c.b2*x2-c.a1*y1-c.a2*y2;x2=x1;x1=x[i];y2=y1;y1=v;y[i]=v;}return y;}
+function filtfilt(x,fc,fs){
+  if(x.length<4||!(fc>0)||fc>=fs/2) return x.slice();
+  var c=bw2(fc,fs), p=Math.min(x.length-1,Math.ceil(3*fs/fc)), ext=[];
+  for(var i=p;i>=1;i--) ext.push(2*x[0]-x[i]);
+  ext=ext.concat(x);
+  for(var j=x.length-2;j>=x.length-1-p;j--) ext.push(2*x[x.length-1]-x[j]);
+  var y=lfilter(c,ext); y.reverse(); y=lfilter(c,y); y.reverse();
+  return y.slice(p,p+x.length);
+}
+
+var FOOTKEYS={L:['HEEL_L','TTIP_L'],R:['HEEL_R','TTIP_R']};
+
+/* フレーム列（関節座標の辞書の配列）を解析 */
+function analyze(frames,opt){
+  // opt: {sex,M,H,fs,fc,thr,floorMode:'global'|'frame',anchor:bool,l:{ap,ml}|null}
+  var N=frames.length, keys=Object.keys(frames[0]);
+  var F=frames;
+  if(opt.fc>0 && N>6){
+    F=frames.map(function(){return {};});
+    keys.forEach(function(k){for(var a=0;a<3;a++){
+      var s=frames.map(function(f){return f[k]?f[k][a]:NaN;});
+      if(s.some(isNaN)){frames.forEach(function(f,i){if(f[k]){F[i][k]=F[i][k]||[0,0,0];F[i][k][a]=f[k][a];}});continue;}
+      var y=filtfilt(s,opt.fc,opt.fs); for(var i=0;i<N;i++){F[i][k]=F[i][k]||[0,0,0];F[i][k][a]=y[i];}}});
+  } else F=frames.map(function(f){var o={};for(var k in f)o[k]=f[k].slice();return o;});
+  // 床
+  function footMin(f){return Math.min(f.HEEL_L[1],f.TTIP_L[1],f.HEEL_R[1],f.TTIP_R[1]);}
+  var gmin=Infinity; F.forEach(function(f){gmin=Math.min(gmin,footMin(f));});
+  F.forEach(function(f){var fl=opt.floorMode==='frame'?footMin(f):(opt.floorMode==='none'?0:gmin); for(var k in f) f[k][1]-=fl;});
+  // 接地
+  var contact=F.map(function(f){var c={};['L','R'].forEach(function(s){c[s]=Math.min(f[FOOTKEYS[s][0]][1],f[FOOTKEYS[s][1]][1])<opt.thr;});return c;});
+  // 足接地アンカー（腰中心座標のデータ向け）
+  if(opt.anchor){var off=[0,0,0];
+    for(var i=1;i<N;i++){var dsum=[0,0,0],n=0;
+      ['L','R'].forEach(function(s){if(contact[i][s]&&contact[i-1][s]) FOOTKEYS[s].forEach(function(k){
+        var prev=add(F[i-1][k],[0,0,0]); dsum=add(dsum,sub(prev,F[i][k])); n++;});});
+      if(n){off=mul(dsum,1/n); off[1]=0;}  // 接地足が前フレームと同じ位置に来るずれ。接地なしなら直前のずれを保つ
+      for(var k in F[i]){F[i][k]=add(F[i][k],off);} // 前フレームは既に移動済み
+    }}
+  // 重心・BOS
+  var out=F.map(function(f,i){
+    var c=computeCOM(f,opt.sex,opt.M), polys={};
+    ['L','R'].forEach(function(s){polys[s]=footPoly(f['HEEL_'+s],f['TTIP_'+s]);});
+    var pts=[];['L','R'].forEach(function(s){if(contact[i][s])pts=pts.concat(polys[s]);});
+    var h=hull(pts);
+    var lat=norm([f.HJC_L[0]-f.HJC_R[0],0,f.HJC_L[2]-f.HJC_R[2]]), fwd=cross(lat,[0,1,0]);
+    return {J:f,com:c.com,segs:c.segs,polys:polys,contact:contact[i],hull:h,area:area(h),lat:lat,fwd:fwd};
+  });
+  // 振子長
+  var hh=[]; out.forEach(function(o){if(o.contact.L&&o.contact.R) hh.push((o.J.HJC_L[1]+o.J.HJC_R[1])/2);});
+  if(!hh.length) out.forEach(function(o){hh.push((o.J.HJC_L[1]+o.J.HJC_R[1])/2);});
+  hh.sort(function(a,b){return a-b;}); var hipH=hh[Math.floor(hh.length*0.9)];
+  var lap=opt.l&&opt.l.ap?opt.l.ap:1.24*hipH, lml=opt.l&&opt.l.ml?opt.l.ml:1.34*hipH;
+  var wap=Math.sqrt(9.81/lap), wml=Math.sqrt(9.81/lml);
+  // 速度・XcoM・余裕
+  out.forEach(function(o,i){
+    var a=out[Math.max(0,i-1)].com, b=out[Math.min(N-1,i+1)].com, dt=(Math.min(N-1,i+1)-Math.max(0,i-1))/opt.fs;
+    var v=N>1&&dt>0?mul(sub(b,a),1/dt):[0,0,0]; o.v=v;
+    var vap=v[0]*o.fwd[0]+v[2]*o.fwd[2], vml=v[0]*o.lat[0]+v[2]*o.lat[2];
+    var P2=[o.com[0],o.com[2]];
+    o.xcom=[o.com[0]+o.fwd[0]*vap/wap+o.lat[0]*vml/wml, o.com[2]+o.fwd[2]*vap/wap+o.lat[2]*vml/wml];
+    o.marginStatic=o.hull.length?signedDist(P2,o.hull):null;
+    o.mos=o.hull.length?signedDist(o.xcom,o.hull):null;
+    if(o.hull.length){var F2=[o.fwd[0],o.fwd[2]],L2=[o.lat[0],o.lat[2]],x=o.xcom;
+      o.mosDir={front:support(o.hull,F2)-(x[0]*F2[0]+x[1]*F2[1]), back:support(o.hull,[-F2[0],-F2[1]])+(x[0]*F2[0]+x[1]*F2[1]),
+        left:support(o.hull,L2)-(x[0]*L2[0]+x[1]*L2[1]), right:support(o.hull,[-L2[0],-L2[1]])+(x[0]*L2[0]+x[1]*L2[1])};}
+    else o.mosDir=null;
+    o.shareL=weightShare(o);
+    o.angles=angles(o.J);
+  });
+  return {frames:out,fs:opt.fs,lap:lap,lml:lml,hipH:hipH,wap:wap,wml:wml};
+}
+function centroid(poly){var s=[0,0,0];poly.forEach(function(p){s=add(s,p);});return mul(s,1/poly.length);}
+function weightShare(o){
+  var cL=o.contact.L,cR=o.contact.R;
+  if(cL&&!cR) return 100; if(cR&&!cL) return 0; if(!cL&&!cR) return null;
+  var a=centroid(o.polys.L),b=centroid(o.polys.R), d=[a[0]-b[0],a[2]-b[2]], L2=d[0]*d[0]+d[1]*d[1];
+  if(L2<1e-8) return 50;
+  var t=((o.com[0]-b[0])*d[0]+(o.com[2]-b[2])*d[1])/L2; return Math.max(0,Math.min(1,t))*100;
+}
+function ang(a,b){return Math.acos(Math.max(-1,Math.min(1,dot(norm(a),norm(b)))))/D;}
+function angles(J){
+  var trunk=sub(J.MIDS,J.MIDH), r={trunkIncl:ang(trunk,[0,1,0])};
+  ['L','R'].forEach(function(s){
+    r['knee'+s]=ang(sub(J['KJC_'+s],J['HJC_'+s]),sub(J['AJC_'+s],J['KJC_'+s]));
+    r['hip'+s]=ang(mul(trunk,-1),sub(J['KJC_'+s],J['HJC_'+s]));
+    r['elb'+s]=ang(sub(J['EJC_'+s],J['SJC_'+s]),sub(J['WJC_'+s],J['EJC_'+s]));
+  });
+  return r;
+}
+
+/* 外部データ（MediaPipe名・本アプリ名・番号付き列）→ 関節辞書 */
+var MP=['nose','left_eye_inner','left_eye','left_eye_outer','right_eye_inner','right_eye','right_eye_outer','left_ear','right_ear','mouth_left','mouth_right','left_shoulder','right_shoulder','left_elbow','right_elbow','left_wrist','right_wrist','left_pinky','right_pinky','left_index','right_index','left_thumb','right_thumb','left_hip','right_hip','left_knee','right_knee','left_ankle','right_ankle','left_heel','right_heel','left_foot_index','right_foot_index'];
+var MAPJ={SJC_L:'left_shoulder',SJC_R:'right_shoulder',EJC_L:'left_elbow',EJC_R:'right_elbow',WJC_L:'left_wrist',WJC_R:'right_wrist',
+  HJC_L:'left_hip',HJC_R:'right_hip',KJC_L:'left_knee',KJC_R:'right_knee',AJC_L:'left_ankle',AJC_R:'right_ankle',
+  HEEL_L:'left_heel',HEEL_R:'right_heel',TTIP_L:'left_foot_index',TTIP_R:'right_foot_index'};
+var REQUIRED=Object.keys(MAPJ);
+
+function parseCSV(text){
+  var lines=text.replace(/\r/g,'').split('\n').filter(function(l){return l.trim().length&&l.trim().charAt(0)!=='#';});
+  if(lines.length<2) throw new Error('行が2行未満です。1行目に列名、2行目以降に数値を入れてください。');
+  var sep=lines[0].indexOf('\t')>=0?'\t':(lines[0].indexOf(';')>=0&&lines[0].indexOf(',')<0?';':',');
+  var head=lines[0].split(sep).map(function(h){return h.trim().toLowerCase().replace(/^"|"$/g,'');});
+  var cols={}, tcol=-1;
+  head.forEach(function(h,i){
+    if(/^(time|t|timestamp|time_s|sec|seconds)$/.test(h)){tcol=i;return;}
+    var m=h.match(/^(.+?)[_.\s]?([xyz])$/), name, ax;
+    var m2=h.match(/^([xyz])[_.\s]?(\d+)$/)||null, m3=h.match(/^(?:lm|landmark|p)?[_]?(\d+)[_.\s]?([xyz])$/);
+    if(m2){name=MP[+m2[2]];ax=m2[1];}
+    else if(m3){name=MP[+m3[1]];ax=m3[2];}
+    else if(m){name=m[1].replace(/[_.\s]+$/,'');ax=m[2];}
+    if(!name) return;
+    cols[name]=cols[name]||{}; cols[name][ax]=i;
+  });
+  var rows=lines.slice(1).map(function(l){return l.split(sep).map(function(v){return parseFloat(v);});});
+  return {cols:cols,rows:rows,tcol:tcol};
+}
+function toFrames(parsed,o){
+  // o: {up:'+y'|'-y'|'+z', unit:'m'|'mm'}
+  var sc=o.unit==='mm'?0.001:1, C=parsed.cols;
+  function get(row,name){var c=C[name];if(!c||c.x==null||c.y==null||c.z==null)return null;
+    var v=[row[c.x]*sc,row[c.y]*sc,row[c.z]*sc]; if(v.some(isNaN))return null;
+    if(o.up==='-y') v=[v[0],-v[1],-v[2]]; else if(o.up==='+z') v=[v[0],v[2],-v[1]]; return v;}
+  function pick(row,key){ var lk=key.toLowerCase(); return get(row,lk)||get(row,MAPJ[key]); }
+  var missing=REQUIRED.filter(function(k){var c=C[k.toLowerCase()]||C[MAPJ[k]];return !(c&&c.x!=null&&c.y!=null&&c.z!=null);});
+  if(missing.length) throw new Error('必要な関節の列が見つかりません：'+missing.map(function(k){return MAPJ[k];}).join(', '));
+  var frames=[], times=[], notes={head:'',hand:''};
+  parsed.rows.forEach(function(row){
+    var f={}, ok=true;
+    REQUIRED.forEach(function(k){var v=pick(row,k); if(!v) ok=false; f[k]=v;});
+    if(!ok) return;
+    f.MIDS=mid(f.SJC_L,f.SJC_R); f.MIDH=mid(f.HJC_L,f.HJC_R);
+    var vt=get(row,'vert'),cv=get(row,'cerv');
+    if(vt&&cv){f.VERT=vt;f.CERV=cv;notes.head='VERT/CERV（de Leva の端点）';}
+    else{var el=get(row,'left_ear'),er=get(row,'right_ear'),ns=get(row,'nose');
+      if(el&&er){f.headCM=mid(el,er);notes.head='両耳の中点で近似';}
+      else if(ns){f.headCM=ns;notes.head='鼻で近似';}
+      else{f.headCM=add(f.MIDS,mul(norm(sub(f.MIDS,f.MIDH)),0.17));notes.head='肩中点から上へ0.17 mで近似';}}
+    ['L','R'].forEach(function(s){var side=s==='L'?'left':'right';
+      var m3=get(row,'met3_'+s.toLowerCase()), ix=get(row,side+'_index'), pk=get(row,side+'_pinky');
+      if(m3){f['MET3_'+s]=m3;notes.hand='MET3';}
+      else if(ix&&pk){f['MET3_'+s]=mid(ix,pk);notes.hand='人差し指と小指の点の中点で近似';}
+      else{f['MET3_'+s]=add(f['WJC_'+s],mul(norm(sub(f['WJC_'+s],f['EJC_'+s])),0.08));notes.hand='前腕の延長0.08 mで近似';}});
+    frames.push(f); times.push(parsed.tcol>=0?row[parsed.tcol]:NaN);
+  });
+  if(frames.length<1) throw new Error('数値として読めた行がありません。');
+  var fs=null;
+  if(times.length>2&&!times.some(isNaN)){var dt=(times[times.length-1]-times[0])/(times.length-1); if(dt>0) fs=1/dt; if(dt>0&&dt>5) fs=1000/dt;}
+  var hipCentered=frames.every(function(f){return len(f.MIDH)<0.03;});
+  return {frames:frames,fs:fs,notes:notes,hipCentered:hipCentered};
+}
+
+/* キーフレームから合成データを作る */
+function synth(keys,B,fs){
+  var T=keys[keys.length-1][0], N=Math.round(T*fs)+1, frames=[];
+  var states=[], cur=Object.assign({},P0,keys[0][1]); states.push(cur);
+  for(var i=1;i<keys.length;i++){cur=Object.assign({},cur,keys[i][1]);states.push(cur);}
+  for(var n=0;n<N;n++){var t=n/fs, i=0; while(i<keys.length-2&&t>keys[i+1][0]) i++;
+    var t0=keys[i][0],t1=keys[i+1][0],u=t1>t0?Math.max(0,Math.min(1,(t-t0)/(t1-t0))):1; u=u*u*(3-2*u);
+    var P={}; for(var k in P0) P[k]=states[i][k]+(states[i+1][k]-states[i][k])*u;
+    var J=buildPose(P,B).J, f={}; for(var j in J) f[j]=J[j].slice(); frames.push(f);}
+  return frames;
+}
+
+/* ---- 歩行の合成：周期関数で姿勢を作る ----
+   φ：左足の歩行周期（0＝左踵接地、0.5＝右踵接地）。角度は度、長さは m */
+var GAIT={
+  normal:{name:'普通の歩き方', stepLen:0.60, cadence:100, stance:0.60, stepW:0.08, toeOut:7, clear:0.04,
+    yawAmp:4, yawPhase:0, shCouple:-1, armAmp:18, armPhase:0, elb:15, latAmp:0.025, vertAmp:0.035, vertPhase:0, baseDrop:0.010, trunkFlex:0, cycles:3},
+  namiashi:{name:'なみあしの歩き方', stepLen:0.60, cadence:100, stance:0.60, stepW:0.16, toeOut:15, clear:0.04,
+    yawAmp:4, yawPhase:-90, shCouple:1, armAmp:6, armPhase:0, elb:15, latAmp:0.040, vertAmp:0.035, vertPhase:0, baseDrop:0.030, trunkFlex:0, cycles:3}
+};
+function smooth(u){u=Math.max(0,Math.min(1,u));return u*u*(3-2*u);}
+function gaitFrames(G,B,fs){
+  var Ts=60/G.cadence, T=2*Ts, v=G.stepLen/Ts, dur=G.cycles*T, N=Math.round(dur*fs)+1, z0=-v*dur/2, a=G.stepLen/2, frames=[];
+  function foot(t,off){var tau=t-off, k=Math.floor(tau/T), u=tau/T-k, zk=z0+v*(k*T+off)+a;
+    if(u<G.stance) return {z:zk,lift:0};
+    var s=(u-G.stance)/(1-G.stance); return {z:zk+2*G.stepLen*smooth(s), lift:G.clear*Math.sin(Math.PI*s)};}
+  for(var n=0;n<N;n++){
+    var t=n/fs, ph=(t/T)%1, P=Object.assign({},P0), w=2*Math.PI;
+    P.stanceW=G.stepW; P.toeOut=G.toeOut;
+    var fl=foot(t,0), fr=foot(t,T/2);
+    P.footLz=fl.z; P.liftL=fl.lift; P.footRz=fr.z; P.liftR=fr.lift;
+    P.pelvZ=z0+v*t;
+    P.pelvX=G.latAmp*Math.cos(w*(ph-0.3));
+    P.pelvDrop=G.baseDrop+G.vertAmp*(1-Math.cos(w*(2*ph-0.6)+G.vertPhase*D))/2;
+    P.pelvYaw=-G.yawAmp*Math.cos(w*ph+G.yawPhase*D);
+    P.trunkRot=(G.shCouple-1)*P.pelvYaw; // 肩の線の向き＝shCouple×骨盤の向き
+    P.trunkFlex=G.trunkFlex;
+    P.shFlexL=G.armAmp*Math.cos(w*(ph-0.5)+G.armPhase*D); P.shFlexR=G.armAmp*Math.cos(w*ph+G.armPhase*D);
+    P.elbL=G.elb; P.elbR=G.elb; P.shAbdL=8; P.shAbdR=8;
+    var J=buildPose(P,B).J, f={}; for(var j in J) f[j]=J[j].slice(); frames.push(f);
+  }
+  return frames;
+}
+function hang(a,b){ // 水平面での左右線の向き（度）
+  return Math.atan2(-(a[2]-b[2]),a[0]-b[0])/D;}
+function summarize(res){
+  var F=res.frames, N=F.length, ys=F.map(function(o){return o.com[1];}), xs=F.map(function(o){return o.com[0];});
+  var tw=F.map(function(o){return hang(o.J.SJC_L,o.J.SJC_R)-hang(o.J.HJC_L,o.J.HJC_R);});
+  var py=F.map(function(o){return hang(o.J.HJC_L,o.J.HJC_R);}), sy=F.map(function(o){return hang(o.J.SJC_L,o.J.SJC_R);});
+  var rng=function(a){return Math.max.apply(null,a)-Math.min.apply(null,a);};
+  var mos=F.map(function(o){return o.mos;}).filter(function(v){return v!=null;});
+  var ml=F.map(function(o){return o.mosDir?Math.min(o.mosDir.left,o.mosDir.right):null;}).filter(function(v){return v!=null;});
+  var ds=F.filter(function(o){return o.contact.L&&o.contact.R;}).length/N;
+  var sp=(F[N-1].com[2]-F[0].com[2])/((N-1)/res.fs);
+  return {speed:sp, comVert:rng(ys), comLat:rng(xs), twist:rng(tw), pelvYaw:rng(py), shYaw:rng(sy),
+    mosMin:mos.length?Math.min.apply(null,mos):null, mosMLmin:ml.length?Math.min.apply(null,ml):null,
+    mosMLmean:ml.length?ml.reduce(function(s,v){return s+v;},0)/ml.length:null, dsPct:ds*100};
+}
+
+return {GAIT:GAIT,gaitFrames:gaitFrames,summarize:summarize,DL:DL,SET:SET,SEG_JP:SEG_JP,P0:P0,makeBody:makeBody,buildPose:buildPose,computeCOM:computeCOM,footPoly:footPoly,
+  hull:hull,area:area,signedDist:signedDist,filtfilt:filtfilt,analyze:analyze,parseCSV:parseCSV,toFrames:toFrames,synth:synth,MP:MP,MAPJ:MAPJ,
+  vec:{add:add,sub:sub,mul:mul,len:len,norm:norm,dot:dot}};
+})();
+if(typeof module!=='undefined') module.exports=Core;
+
+</script>
+<script>
+(function(){
+'use strict';
+var $=function(id){return document.getElementById(id);};
+var V=Core.vec;
+var css=function(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim();};
+
+/* ---------- state ---------- */
+var S={sex:'male',H:1.70,M:65,P:Object.assign({},Core.P0,{pelvX:0.04}),mode:'manual',
+  data:null, raw:null, res:null, idx:0, playing:false, src:''};
+function body(){return Core.makeBody(S.sex,S.H,S.M);}
+
+/* ---------- sliders ---------- */
+var SL=[
+ ['足の置き方',[['stanceW','足幅',0,60,1,'cm'],['footLz','左足 前後',-40,40,1,'cm'],['footRz','右足 前後',-40,40,1,'cm'],['toeOut','つま先の開き',-10,45,1,'°'],['liftL','左足を上げる',0,40,1,'cm'],['liftR','右足を上げる',0,40,1,'cm']]],
+ ['骨盤',[['pelvX','左右へ移す',-25,25,0.5,'cm'],['pelvZ','前後へ移す',-30,30,0.5,'cm'],['pelvDrop','腰を落とす',0,50,0.5,'cm'],['pelvYaw','水平回旋',-45,45,1,'°'],['pelvTilt','前傾（+）',-30,30,1,'°'],['pelvObl','左を上げる',-15,15,1,'°']]],
+ ['体幹・頭',[['trunkFlex','前屈（+）',-30,90,1,'°'],['trunkSide','左へ側屈',-30,30,1,'°'],['trunkRot','左へ回旋',-45,45,1,'°'],['neckFlex','首の前屈',-30,45,1,'°']]],
+ ['腕',[['shFlexL','左肩 前挙',-45,180,1,'°'],['shAbdL','左肩 外転',0,180,1,'°'],['elbL','左肘 屈曲',0,150,1,'°'],['shFlexR','右肩 前挙',-45,180,1,'°'],['shAbdR','右肩 外転',0,180,1,'°'],['elbR','右肘 屈曲',0,150,1,'°']]]
+];
+var isLen=function(u){return u==='cm';};
+function buildSliders(){
+  var box=$('sliders'); box.textContent='';
+  SL.forEach(function(g){
+    var fs=document.createElement('fieldset'); var lg=document.createElement('legend'); lg.textContent=g[0]; fs.appendChild(lg);
+    g[1].forEach(function(s){
+      var row=document.createElement('div'); row.className='sl';
+      var lab=document.createElement('label'); lab.htmlFor='s_'+s[0]; lab.textContent=s[1];
+      var inp=document.createElement('input'); inp.type='range'; inp.id='s_'+s[0]; inp.min=s[2]; inp.max=s[3]; inp.step=s[4];
+      var out=document.createElement('output'); out.className='num'; out.id='o_'+s[0];
+      inp.addEventListener('input',function(){S.P[s[0]]=isLen(s[5])?+inp.value/100:+inp.value; toManual(); render();});
+      row.append(lab,inp,out); fs.appendChild(row);
+    });
+    box.appendChild(fs);
+  });
+}
+function syncSliders(){SL.forEach(function(g){g[1].forEach(function(s){var v=S.P[s[0]], d=isLen(s[5])?v*100:v;
+  $('s_'+s[0]).value=d; $('o_'+s[0]).textContent=(Math.round(d*10)/10)+(s[5]==='°'?'°':' cm');});});}
+
+var PRESETS=[
+ ['自然立位',{}],
+ ['重心を左へ',{pelvX:0.10,pelvDrop:0.03}],
+ ['左片脚立ち',{pelvX:0.11,pelvDrop:0.03,liftR:0.15}],
+ ['前後に開いて腰を落とす',{footLz:0.30,footRz:-0.20,stanceW:0.26,toeOut:25,pelvDrop:0.14,pelvZ:0.05,elbL:60,elbR:60,shFlexL:40,shFlexR:40}],
+ ['深く曲げる',{pelvDrop:0.36,trunkFlex:35,pelvZ:-0.12,shFlexL:80,shFlexR:80,elbL:10,elbR:10}],
+ ['上体を前に倒す',{trunkFlex:60,pelvZ:-0.08,shFlexL:60,shFlexR:60}]
+];
+function buildPresets(){var b=$('presets');PRESETS.forEach(function(p){var x=document.createElement('button');x.className='btn';x.textContent=p[0];
+  x.addEventListener('click',function(){S.P=Object.assign({},Core.P0,p[1]);toManual();syncSliders();render();});b.appendChild(x);});}
+
+function toManual(){ if(S.mode!=='manual'){S.mode='manual';stop();S.res=null;drawChart();} }
+
+/* ---------- samples ---------- */
+var SAMPLES=[
+ ['左右の体重移動',[[0,{}],[0.6,{pelvDrop:0.03}],[1.8,{pelvX:0.10}],[3.8,{pelvX:-0.10}],[5.2,{pelvX:0}],[6,{}]]],
+ ['片脚立ちへ',[[0,{}],[1.6,{pelvX:0.11,pelvDrop:0.03}],[2.6,{liftR:0.14}],[4.2,{liftR:0.14}],[5.0,{liftR:0}],[6.2,{pelvX:0}],[6.8,{}]]],
+ ['一歩踏み出す',[[0,{}],[1.0,{pelvX:-0.09,pelvDrop:0.03}],[1.6,{liftL:0.07,footLz:0.12,pelvDrop:0.05}],[2.2,{footLz:0.30,liftL:0.02,pelvZ:0.06,pelvDrop:0.07}],[2.5,{liftL:0}],[3.6,{pelvX:0.0,pelvZ:0.17}],[4.6,{pelvX:0.08,pelvZ:0.28,pelvDrop:0.05}],[5.4,{}]]],
+ ['腰を落として前後に移る',[[0,{footLz:0.30,footRz:-0.20,stanceW:0.26,toeOut:25,pelvDrop:0.14,pelvZ:0.05}],[1.2,{}],[2.6,{pelvZ:0.16}],[4.0,{pelvZ:-0.08}],[5.2,{pelvZ:0.05}],[6,{}]]]
+];
+function buildSamples(){var b=$('samples');SAMPLES.forEach(function(s){var x=document.createElement('button');x.className='btn';x.textContent=s[0];
+  x.addEventListener('click',function(){
+    var fr=Core.synth(s[1],body(),30);
+    S.raw={frames:fr,fs:30,notes:{head:'VERT/CERV（模型）',hand:'MET3（模型）'},hipCentered:false,synthetic:true,name:s[0]};
+    $('fsIn').value=30; analyzeData(); $('dataMsg').className='msg';
+    $('dataMsg').textContent='「'+s[0]+'」を読み込みました。本模型の手動姿勢をキーフレームで補間した合成データ（30 Hz）で、実測ではありません。';
+  });b.appendChild(x);});}
+
+/* ---------- data import ---------- */
+var TEMPLATE=(function(){var n=['left_shoulder','right_shoulder','left_elbow','right_elbow','left_wrist','right_wrist','left_hip','right_hip','left_knee','right_knee','left_ankle','right_ankle','left_heel','right_heel','left_foot_index','right_foot_index'];
+  var h=['time'];n.forEach(function(k){h.push(k+'_x',k+'_y',k+'_z');});return h.join(',')+'\n0.000,0.18,-0.45,0.02,...\n0.033,...';})();
+$('tmpl').textContent=TEMPLATE;
+$('file').addEventListener('change',function(){var f=this.files&&this.files[0];if(!f)return;
+  var rd=new FileReader(); rd.onload=function(){loadText(String(rd.result),f.name);}; rd.onerror=function(){showErr('ファイルを読めませんでした。');}; rd.readAsText(f);});
+function showErr(m){$('dataMsg').className='msg err';$('dataMsg').textContent=m;}
+function loadText(text,name){
+  try{
+    var parsed=Core.parseCSV(text), T=Core.toFrames(parsed,{up:$('up').value,unit:$('unit').value});
+    if(T.fs){$('fsIn').value=Math.round(T.fs*100)/100;}
+    S.raw=Object.assign(T,{name:name,synthetic:false,parsed:parsed});
+    analyzeData();
+    var o=S.res.frames, hgt=Math.max.apply(null,o.map(function(x){return x.J.MIDS[1];}));
+    var m=name+'：'+T.frames.length+' フレーム、'+(T.fs?T.fs.toFixed(1)+' Hz（時間列から）':'時間列なし（標本化周波数の入力値を使用）')+'。頭：'+T.notes.head+'。手：'+T.notes.hand+'。'+(T.hipCentered?'腰中心の座標と判定。':'');
+    if(hgt<0.3) m+=' 肩の高さが低すぎます。上向きの軸か単位が違う可能性があります。';
+    $('dataMsg').className='msg'; $('dataMsg').textContent=m;
+  }catch(e){showErr(e.message);}
+}
+function reloadRaw(){ if(S.raw&&S.raw.parsed){ try{var T=Core.toFrames(S.raw.parsed,{up:$('up').value,unit:$('unit').value}); Object.assign(S.raw,T);}catch(e){showErr(e.message);return false;} } return true; }
+$('reanalyze').addEventListener('click',function(){ if(!S.raw){showErr('先にデータを読み込んでください。');return;} if(reloadRaw()) analyzeData(); });
+
+function analyzeData(){
+  var fs=+$('fsIn').value||30, fc=+$('fc').value, thr=(+$('thr').value||3)/100;
+  if(S.raw.synthetic) thr=0.005;
+  var fm=$('floor').value, an=$('anchor').value;
+  if(fm==='auto') fm=S.raw.hipCentered?'frame':'global';
+  var anchor=an==='on'||(an==='auto'&&S.raw.hipCentered);
+  var l={ap:+$('lap').value||0, ml:+$('lml').value||0};
+  var warn='';
+  if(fc>=fs/2){warn='遮断周波数が標本化周波数の半分以上なので平滑化しません。'; fc=0;}
+  S.res=Core.analyze(S.raw.frames,{sex:S.sex,M:S.M,H:S.H,fs:fs,fc:fc,thr:thr,floorMode:fm,anchor:anchor,l:l});
+  S.res.cfg={fs:fs,fc:fc,thr:thr,floor:fm,anchor:anchor};
+  S.mode='data'; S.idx=0; $('scrub').max=S.res.frames.length-1; $('scrub').value=0;
+  $('tlnote').textContent=(S.raw.synthetic?'合成データ（本模型で生成）':'読み込みデータ')+'：'+S.raw.name+'。平滑化 '+(fc?fc+' Hz':'なし')+'、床＝'+(fm==='frame'?'フレームごと':'全体の最下点')+'、足接地アンカー '+(anchor?'あり':'なし')+'。'+warn;
+  trail=null; render(); drawChart();
+}
+
+/* ---------- three.js ---------- */
+var view=$('view'), renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(2,window.devicePixelRatio||1)); view.insertBefore(renderer.domElement,view.firstChild);
+var scene=new THREE.Scene(), camera=new THREE.PerspectiveCamera(32,1,0.05,50);
+var controls=new THREE.OrbitControls(camera,renderer.domElement); controls.target.set(0,0.85,0); controls.enableDamping=true;
+scene.add(new THREE.HemisphereLight(0xffffff,0x667070,0.85)); var dl=new THREE.DirectionalLight(0xffffff,0.6); dl.position.set(2,4,3); scene.add(dl);
+var M={};
+function mat(c,o){return new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:0.7,metalness:0},o||{}));}
+var floor=new THREE.Mesh(new THREE.PlaneGeometry(8,8),new THREE.MeshBasicMaterial({color:0xcccccc})); floor.rotation.x=-Math.PI/2; scene.add(floor);
+var grid=null;
+var bodyMat=mat(0x888888), jointMat=mat(0x888888), segMat=mat(0x333333), comMat=mat(0xff6600,{emissive:0x331100}), xMat=mat(0x7c3aed);
+var cylG=new THREE.CylinderGeometry(1,1,1,14), sphG=new THREE.SphereGeometry(1,20,14);
+var limbs=[], joints={};
+var LIMBS=[['MIDH','MIDS',0.085],['HJC_L','HJC_R',0.05],['SJC_L','SJC_R',0.04],['CERV','VERT',0.03],
+  ['SJC_L','EJC_L',0.032],['EJC_L','WJC_L',0.026],['WJC_L','MET3_L',0.02],['SJC_R','EJC_R',0.032],['EJC_R','WJC_R',0.026],['WJC_R','MET3_R',0.02],
+  ['HJC_L','KJC_L',0.05],['KJC_L','AJC_L',0.038],['HJC_R','KJC_R',0.05],['KJC_R','AJC_R',0.038],['AJC_L','HEEL_L',0.022],['AJC_R','HEEL_R',0.022],['AJC_L','TTIP_L',0.022],['AJC_R','TTIP_R',0.022]];
+LIMBS.forEach(function(l){var m=new THREE.Mesh(cylG,bodyMat);m.userData=l;scene.add(m);limbs.push(m);});
+var head=new THREE.Mesh(sphG,bodyMat); scene.add(head);
+var segDots=[]; for(var i=0;i<14;i++){var d=new THREE.Mesh(sphG,segMat);scene.add(d);segDots.push(d);}
+var comBall=new THREE.Mesh(sphG,comMat); comBall.scale.setScalar(0.035); scene.add(comBall);
+var plumbMat=new THREE.LineBasicMaterial({color:0xff6600}), plumb=new THREE.Line(new THREE.BufferGeometry(),plumbMat); scene.add(plumb);
+var projRing=new THREE.Mesh(new THREE.RingGeometry(0.018,0.03,28),new THREE.MeshBasicMaterial({color:0xff6600,side:THREE.DoubleSide})); projRing.rotation.x=-Math.PI/2; scene.add(projRing);
+var xMark=new THREE.Mesh(new THREE.CircleGeometry(0.02,4),new THREE.MeshBasicMaterial({color:0x7c3aed,side:THREE.DoubleSide})); xMark.rotation.x=-Math.PI/2; scene.add(xMark);
+var xLine=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0x7c3aed})); scene.add(xLine);
+var bosMesh=new THREE.Mesh(new THREE.BufferGeometry(),new THREE.MeshBasicMaterial({color:0x0f766e,transparent:true,opacity:0.25,side:THREE.DoubleSide,depthWrite:false})); scene.add(bosMesh);
+var bosLine=new THREE.LineLoop(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0x0f766e})); scene.add(bosLine);
+var footLines={L:new THREE.LineLoop(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0x888888})),R:new THREE.LineLoop(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0x888888}))};
+scene.add(footLines.L); scene.add(footLines.R);
+var trailLine=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0xff6600,transparent:true,opacity:0.55})); scene.add(trailLine);
+var trail=null, follow=false;
+
+function applyTheme(){
+  var c=function(n){return new THREE.Color(css(n));};
+  renderer.setClearColor(c('--view'));
+  floor.material.color=c('--floor');
+  if(grid) scene.remove(grid); grid=new THREE.GridHelper(8,80,c('--grid'),c('--grid')); grid.position.y=0.0005; scene.add(grid);
+  bodyMat.color=c('--body'); segMat.color=c('--segcm'); comMat.color=c('--accent'); comMat.emissive=c('--accent').multiplyScalar(0.25);
+  plumbMat.color=c('--accent'); projRing.material.color=c('--accent'); trailLine.material.color=c('--accent');
+  xMark.material.color=c('--xcom'); xLine.material.color=c('--xcom');
+  bosMesh.material.color=c('--bos'); bosLine.material.color=c('--bos'); footLines.L.material.color=c('--muted'); footLines.R.material.color=c('--muted');
+  drawChart(); render();
+}
+var tv=function(p){return new THREE.Vector3(p[0],p[1],p[2]);};
+var Y=new THREE.Vector3(0,1,0);
+function placeCyl(m,a,b,r){var A=tv(a),B=tv(b),d=B.clone().sub(A),L=d.length(); if(L<1e-6){m.visible=false;return;} m.visible=true;
+  m.position.copy(A).add(B).multiplyScalar(0.5); m.quaternion.setFromUnitVectors(Y,d.normalize()); m.scale.set(r,L,r);}
+function setLine(line,pts){line.geometry.dispose(); line.geometry=new THREE.BufferGeometry().setFromPoints(pts.map(tv));}
+
+function resize(){var w=view.clientWidth,h=view.clientHeight;renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();}
+new ResizeObserver(resize).observe(view);
+function cam(k){var t=controls.target.set(0,0.85,0);
+  if(k==='front') camera.position.set(0,1.0,4.4); else if(k==='side') camera.position.set(4.4,1.0,0); else if(k==='top') camera.position.set(0,5.2,0.001); else camera.position.set(2.7,1.9,3.4);
+  controls.update();}
+$('follow').addEventListener('click',function(){follow=!follow;this.setAttribute('aria-pressed',follow);this.classList.toggle('on',follow);render();});
+document.querySelectorAll('[data-cam]').forEach(function(b){b.addEventListener('click',function(){cam(b.dataset.cam);});});
+cam('persp');
+(function loop(){requestAnimationFrame(loop);controls.update();renderer.render(scene,camera);})();
+
+/* ---------- compute current frame ---------- */
+function current(){
+  if(S.mode==='data'&&S.res){var o=S.res.frames[S.idx];return {o:o,J:o.J,res:S.res};}
+  var B=body(), r=Core.buildPose(S.P,B);
+  var fr=[r.J]; var res=Core.analyze(fr,{sex:S.sex,M:S.M,H:S.H,fs:30,fc:0,thr:0.002,floorMode:'none',anchor:false,l:{ap:+$('lap').value||0,ml:+$('lml').value||0}});
+  res.reach=r.reach; return {o:res.frames[0],J:res.frames[0].J,res:res};
+}
+
+var fmtcm=function(v){return v==null?'—':(v*100).toFixed(1)+' cm';};
+function render(){
+  var c=current(), o=c.o, J=o.J;
+  limbs.forEach(function(m){var l=m.userData; if(J[l[0]]&&J[l[1]]) placeCyl(m,J[l[0]],J[l[1]],l[2]); else m.visible=false;});
+  var hc=o.segs[0].p; head.position.copy(tv(hc)); head.scale.setScalar(0.1*S.H/1.7);
+  o.segs.forEach(function(s,i){segDots[i].position.copy(tv(s.p)); segDots[i].scale.setScalar(0.012+0.012*Math.cbrt(s.m));});
+  comBall.position.copy(tv(o.com));
+  if(follow){var dz=o.com[2]-controls.target.z, dx=o.com[0]*0-controls.target.x*0; controls.target.z+=dz; camera.position.z+=dz;}
+  setLine(plumb,[o.com,[o.com[0],0.001,o.com[2]]]); projRing.position.set(o.com[0],0.002,o.com[2]);
+  xMark.position.set(o.xcom[0],0.003,o.xcom[1]); setLine(xLine,[[o.com[0],0.003,o.com[2]],[o.xcom[0],0.003,o.xcom[1]]]);
+  var dyn=S.mode==='data'; xMark.visible=dyn; xLine.visible=dyn;
+  ['L','R'].forEach(function(s){setLine(footLines[s],o.polys[s].map(function(p){return [p[0],p[1]+0.002,p[2]];}));});
+  // BOS
+  bosMesh.geometry.dispose(); bosLine.geometry.dispose();
+  if(o.hull.length>=3){var pos=[];for(var i=1;i<o.hull.length-1;i++){[o.hull[0],o.hull[i],o.hull[i+1]].forEach(function(q){pos.push(q[0],0.001,q[1]);});}
+    var g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3)); bosMesh.geometry=g; bosMesh.visible=true;
+    bosLine.geometry=new THREE.BufferGeometry().setFromPoints(o.hull.map(function(q){return new THREE.Vector3(q[0],0.0015,q[1]);})); bosLine.visible=true;}
+  else{bosMesh.geometry=new THREE.BufferGeometry(); bosMesh.visible=false; bosLine.geometry=new THREE.BufferGeometry(); bosLine.visible=false;}
+  // trail
+  if(dyn){ if(!trail){trail=S.res.frames.map(function(f){return [f.com[0],0.0012,f.com[2]];}); setLine(trailLine,trail);} trailLine.visible=true; } else trailLine.visible=false;
+  // HUD
+  var reachWarn=(c.res.reach&&(!c.res.reach.L||!c.res.reach.R))?'<span style="color:var(--bad)">脚が届かない側があります（足が床から浮く）</span>':'';
+  var m=o.marginStatic, mos=o.mos;
+  var colr=function(v){return v==null?'inherit':(v>=0?'var(--good)':'var(--bad)');};
+  var title=dyn?'<span><b>'+(S.raw.synthetic?'合成データ':'実測データ')+'</b> <span class="num">'+(S.idx/S.res.fs).toFixed(2)+' s</span></span>':'<span><b>手動姿勢</b></span>';
+  $('hud').innerHTML=title+
+    '<span>重心の高さ <span class="num">'+(o.com[1]*100).toFixed(1)+' cm（身長比 '+(o.com[1]/S.H).toFixed(3)+'）</span></span>'+
+    '<span>左足の荷重 <span class="num">'+(o.shareL==null?'—':o.shareL.toFixed(0)+' %')+'</span></span>'+
+    '<span>静的余裕 <span class="num" style="color:'+(m==null?'inherit':m>=0?'var(--good)':'var(--bad)')+'">'+fmtcm(m)+'</span>'+(dyn?'　MoS <span class="num" style="color:'+(mos==null?'inherit':mos>=0?'var(--good)':'var(--bad)')+'">'+fmtcm(mos)+'</span>':'')+'</span>'+reachWarn;
+  $('modeMsg').textContent=S.mode==='manual'?'手動姿勢を表示中。静止を仮定するので速度は0、外挿重心は重心と一致する。':'データを表示中。スライダーを動かすと手動姿勢に戻る。';
+  if(S.mode==='data'){$('scrub').value=S.idx;$('tlab').textContent=(S.idx/S.res.fs).toFixed(2)+' / '+((S.res.frames.length-1)/S.res.fs).toFixed(2)+' s';}
+  else $('tlab').textContent='手動姿勢（時系列なし）';
+  numbers(c);
+  drawCursor();
+}
+
+/* ---------- numbers ---------- */
+function numbers(c){
+  var o=c.o, r=c.res, a=o.angles, kv=[];
+  var p=function(k,v){kv.push('<dt>'+k+'</dt><dd class="num">'+v+'</dd>');};
+  p('全身重心 x（左+）',(o.com[0]*100).toFixed(1)+' cm'); p('全身重心 y（高さ）',(o.com[1]*100).toFixed(1)+' cm'); p('全身重心 z（前+）',(o.com[2]*100).toFixed(1)+' cm');
+  p('重心高／身長',(o.com[1]/S.H).toFixed(3));
+  p('支持基底面の面積',(o.area*1e4).toFixed(0)+' cm²');
+  p('接地',(o.contact.L?'左':'')+(o.contact.R?(o.contact.L?'・':'')+'右':'')||'なし');
+  p('左足の荷重（近似）',o.shareL==null?'—':o.shareL.toFixed(1)+' %');
+  p('静的余裕',fmtcm(o.marginStatic));
+  p('重心速度（水平）',(Math.hypot(o.v[0],o.v[2])*100).toFixed(1)+' cm/s');
+  p('MoS（2次元）',fmtcm(o.mos));
+  if(o.mosDir){p('MoS 前',fmtcm(o.mosDir.front));p('MoS 後',fmtcm(o.mosDir.back));p('MoS 左',fmtcm(o.mosDir.left));p('MoS 右',fmtcm(o.mosDir.right));}
+  p('振子長 前後／左右',r.lap.toFixed(3)+' / '+r.lml.toFixed(3)+' m');
+  p('体幹の傾き（鉛直から）',a.trunkIncl.toFixed(1)+'°');
+  p('膝の屈曲 左／右',a.kneeL.toFixed(1)+'° / '+a.kneeR.toFixed(1)+'°');
+  p('股関節（体幹と大腿）左／右',a.hipL.toFixed(1)+'° / '+a.hipR.toFixed(1)+'°');
+  p('肘の屈曲 左／右',a.elbL.toFixed(1)+'° / '+a.elbR.toFixed(1)+'°');
+  $('kv').innerHTML=kv.join('');
+  var t=Core.DL[S.sex].seg, rows='<tr><th>体節</th><th class="r">質量 kg</th><th class="r">x cm</th><th class="r">y cm</th><th class="r">z cm</th></tr>';
+  o.segs.forEach(function(s){rows+='<tr><td>'+Core.SEG_JP[s.k]+(s.side?'（'+(s.side==='L'?'左':'右')+'）':'')+'</td><td class="r num">'+(s.m/100*S.M).toFixed(2)+'</td><td class="r num">'+(s.p[0]*100).toFixed(1)+'</td><td class="r num">'+(s.p[1]*100).toFixed(1)+'</td><td class="r num">'+(s.p[2]*100).toFixed(1)+'</td></tr>';});
+  $('segtbl').innerHTML=rows;
+}
+function basisTables(){
+  var t=Core.DL[S.sex], h='<tr><th>体節</th><th>起点 → 終点</th><th class="r">m %</th><th class="r">c %</th><th class="r">長さ mm</th></tr>';
+  for(var k in t.seg){var s=t.seg[k]; h+='<tr><td>'+Core.SEG_JP[k]+'</td><td>'+s.ends+'</td><td class="r num">'+s.m.toFixed(2)+'</td><td class="r num">'+s.c.toFixed(2)+'</td><td class="r num">'+s.L.toFixed(1)+'</td></tr>';}
+  h+='<tr><td colspan="5" class="sub">基準標本：身長 '+t.stature+' mm、体重 '+t.mass+' kg。体節長は身長比で拡大縮小。'+(S.sex==='female'?'女性の体幹（MIDS→MIDH）の m は資料により 42.51／42.57／42.58 と読める。全身重心は Σm で割るので結果への影響は小さい。':'')+'</td></tr>';
+  $('dltbl').innerHTML=h;
+  var Sx=Core.SET, s='<tr><th>項目</th><th class="r">値</th></tr>';
+  [['足関節中心の高さ','身長 × '+Sx.ankleH],['両股関節中心の間隔','身長 × '+(2*Sx.hipHalf).toFixed(3)],['両肩関節中心の間隔','身長 × '+(2*Sx.shHalf).toFixed(3)],['肩中点から第7頸椎まで','身長 × '+Sx.cervUp],
+   ['足関節から踵まで','足長 × '+Sx.heelBack],['踵の幅','足長 × '+Sx.heelW],['前足部の幅','足長 × '+Sx.foreW],['中足骨頭の位置','踵から足長 × '+Sx.mtPos],['手動姿勢の接地閾値','0.2 cm'],['合成データの接地閾値','1 cm']].forEach(function(r){s+='<tr><td>'+r[0]+' <span class="chip cm">設定</span></td><td class="r num">'+r[1]+'</td></tr>';});
+  $('settbl').innerHTML=s;
+}
+
+/* ---------- chart ---------- */
+var chart=$('chart'), cx=chart.getContext('2d',{willReadFrequently:true});
+var BANDS=[['静的余裕と MoS（cm）',function(o){return o.marginStatic==null?null:o.marginStatic*100;},function(o){return o.mos==null?null:o.mos*100;}],
+           ['左足の荷重（%）',function(o){return o.shareL;}],
+           ['重心の高さ（cm）',function(o){return o.com[1]*100;}]];
+function drawChart(){
+  var dpr=Math.min(2,window.devicePixelRatio||1), w=chart.clientWidth, h=chart.clientHeight; chart.width=w*dpr; chart.height=h*dpr; cx.setTransform(dpr,0,0,dpr,0,0);
+  cx.clearRect(0,0,w,h);
+  var fg=css('--fg'),mu=css('--muted'),ln=css('--line'),ac=css('--accent'),xc=css('--xcom'),bo=css('--bos');
+  cx.font='11px '+css('--f-body');
+  if(!S.res||S.mode!=='data'){cx.fillStyle=mu;cx.fillText('「データ」タブで見本か CSV を読み込むと、ここに時系列が出ます。手動姿勢では時系列はありません。',12,24);return;}
+  var F=S.res.frames, N=F.length, x0=52, x1=w-12, bh=(h-26)/3;
+  var X=function(i){return x0+(x1-x0)*i/Math.max(1,N-1);};
+  BANDS.forEach(function(b,bi){
+    var top=6+bi*bh+14, bot=6+bi*bh+bh-16, vals=[];
+    for(var s=1;s<b.length;s++) F.forEach(function(o){var v=b[s](o); if(v!=null) vals.push(v);});
+    if(bi===1){vals.push(0,100);} if(bi===0) vals.push(0);
+    var lo=Math.min.apply(null,vals), hi=Math.max.apply(null,vals); if(hi-lo<1e-6){hi+=1;lo-=1;} var pad=(hi-lo)*0.08; lo-=pad; hi+=pad;
+    var Yb=function(v){return bot-(v-lo)/(hi-lo)*(bot-top);};
+    cx.strokeStyle=ln; cx.lineWidth=1; cx.beginPath(); cx.moveTo(x0,bot); cx.lineTo(x1,bot); cx.stroke();
+    if(bi===0&&lo<0&&hi>0){cx.setLineDash([3,3]);cx.beginPath();cx.moveTo(x0,Yb(0));cx.lineTo(x1,Yb(0));cx.stroke();cx.setLineDash([]);}
+    cx.fillStyle=mu; cx.textAlign='right'; cx.fillText(hi.toFixed(bi===2?0:1),x0-4,top+8); cx.fillText(lo.toFixed(bi===2?0:1),x0-4,bot);
+    cx.textAlign='left'; cx.fillStyle=fg; cx.fillText(b[0],x0+4,top-4);
+    var cols=bi===0?[fg,xc]:[bi===1?bo:ac];
+    for(var s=1;s<b.length;s++){cx.strokeStyle=cols[s-1]; cx.lineWidth=1.6; cx.beginPath(); var pen=false;
+      F.forEach(function(o,i){var v=b[s](o); if(v==null){pen=false;return;} if(!pen){cx.moveTo(X(i),Yb(v));pen=true;} else cx.lineTo(X(i),Yb(v));}); cx.stroke();}
+    if(bi===0){cx.fillStyle=fg;cx.fillText('― 静的余裕',x1-130,top-4);cx.fillStyle=xc;cx.fillText('― MoS',x1-50,top-4);}
+  });
+  cx.fillStyle=mu; cx.textAlign='right'; cx.fillText(((N-1)/S.res.fs).toFixed(1)+' s',x1,h-4); cx.textAlign='left'; cx.fillText('0 s',x0,h-4);
+  chart._x0=x0; chart._x1=x1; drawCursor();
+}
+var cursorImg=null;
+function drawCursor(){
+  if(!S.res||S.mode!=='data') return;
+  var dpr=Math.min(2,window.devicePixelRatio||1);
+  if(!cursorImg||cursorImg.w!==chart.width){cursorImg={w:chart.width,d:cx.getImageData(0,0,chart.width,chart.height)};}
+  cx.putImageData(cursorImg.d,0,0);
+  var N=S.res.frames.length, x=chart._x0+(chart._x1-chart._x0)*S.idx/Math.max(1,N-1);
+  cx.strokeStyle=css('--accent'); cx.lineWidth=1.5; cx.beginPath(); cx.moveTo(x,4); cx.lineTo(x,chart.clientHeight-18); cx.stroke();
+}
+var _dc=drawChart; drawChart=function(){cursorImg=null;_dc();};
+function scrubTo(e){ if(!S.res||S.mode!=='data') return; var r=chart.getBoundingClientRect(), u=(e.clientX-r.left-chart._x0)/(chart._x1-chart._x0);
+  S.idx=Math.max(0,Math.min(S.res.frames.length-1,Math.round(u*(S.res.frames.length-1)))); render(); }
+chart.addEventListener('pointerdown',function(e){scrubTo(e);chart.setPointerCapture(e.pointerId);});
+chart.addEventListener('pointermove',function(e){if(e.buttons)scrubTo(e);});
+$('scrub').addEventListener('input',function(){if(S.mode==='data'){S.idx=+this.value;render();}});
+new ResizeObserver(function(){drawChart();}).observe(chart);
+
+/* ---------- playback ---------- */
+var raf=0,last=0,acc=0;
+function stop(){S.playing=false;cancelAnimationFrame(raf);$('play').textContent='▶ 再生';}
+$('play').addEventListener('click',function(){
+  if(S.mode!=='data'||!S.res){ $('tlnote').textContent='再生できるのはデータを読み込んだときです。「データ」タブで見本を選んでください。'; return; }
+  if(S.playing){stop();return;}
+  if(S.idx>=S.res.frames.length-1) S.idx=0;
+  S.playing=true; $('play').textContent='■ 止める'; last=performance.now(); acc=0;
+  var step=function(t){ if(!S.playing) return; acc+=(t-last)/1000*(+$('speed').value); last=t;
+    var adv=Math.floor(acc*S.res.fs); if(adv>0){acc-=adv/S.res.fs; S.idx=Math.min(S.res.frames.length-1,S.idx+adv); render();}
+    if(S.idx>=S.res.frames.length-1){stop();return;} raf=requestAnimationFrame(step);};
+  raf=requestAnimationFrame(step);
+});
+
+/* ---------- copy ---------- */
+function copyText(txt,btn,msgEl){
+  var done=function(ok){msgEl.hidden=false;msgEl.className='msg'+(ok?'':' err');msgEl.textContent=ok?'コピーしました（'+txt.split('\n').length+' 行）。表計算ソフトに貼り付けられます。':'自動コピーができない環境です。下の欄を選択してコピーしてください。';
+    if(!ok){var ta=document.createElement('textarea');ta.value=txt;ta.style.cssText='width:100%;height:120px;font-family:var(--f-num);font-size:11px';msgEl.appendChild(ta);ta.select();}};
+  try{navigator.clipboard.writeText(txt).then(function(){done(true);},function(){done(false);});}catch(e){done(false);}
+}
+$('copyCsv').addEventListener('click',function(){
+  var rows=['time_s,com_x_m,com_y_m,com_z_m,v_x_mps,v_z_mps,xcom_x_m,xcom_z_m,contact_L,contact_R,bos_area_m2,margin_static_m,mos_2d_m,mos_front_m,mos_back_m,mos_left_m,mos_right_m,share_L_pct,trunk_incl_deg,knee_L_deg,knee_R_deg'];
+  var frames=S.mode==='data'&&S.res?S.res.frames:[current().o], fs=S.mode==='data'&&S.res?S.res.fs:1;
+  var f=function(v,d){return v==null?'':v.toFixed(d);};
+  frames.forEach(function(o,i){var md=o.mosDir||{};rows.push([f(i/fs,4),f(o.com[0],4),f(o.com[1],4),f(o.com[2],4),f(o.v[0],4),f(o.v[2],4),f(o.xcom[0],4),f(o.xcom[1],4),o.contact.L?1:0,o.contact.R?1:0,f(o.area,5),f(o.marginStatic,4),f(o.mos,4),f(md.front,4),f(md.back,4),f(md.left,4),f(md.right,4),f(o.shareL,2),f(o.angles.trunkIncl,2),f(o.angles.kneeL,2),f(o.angles.kneeR,2)].join(','));});
+  rows.unshift('# 全身重心3D模型 / 体節表 de Leva 1996 '+(S.sex==='male'?'男性':'女性')+' / 身長 '+S.H+' m / 体重 '+S.M+' kg / '+(S.mode==='data'?('データ '+S.raw.name+' fs '+S.res.cfg.fs+' Hz fc '+S.res.cfg.fc+' Hz'):'手動姿勢')+' / 座標 x左 y上 z前');
+  copyText(rows.join('\n'),this,$('copyMsg'));
+});
+$('copyTmpl').addEventListener('click',function(){copyText(TEMPLATE.split('\n')[0],this,$('dataMsg'));});
+
+/* ---------- gait demos ---------- */
+var GROWS=[
+ ['stepLen','歩幅','m','cm','両者同じ値にして比較する。'],
+ ['cadence','歩調','歩/分','cm','両者同じ値（速さ 約1.0 m/s）。'],
+ ['stance','立脚期の割合','','cm','両者同じ。'],
+ ['stepW','歩隔（左右の足の間隔）','m','cs','二軸は骨盤幅ほどの二本のレール上、中心軸は重心の真下へ接地（木寺, namiashi.net）。数値は設定。'],
+ ['toeOut','つま先の開き','°','ci','股関節の外旋を重視するという解説（getta.jp）から。数値は設定。'],
+ ['clear','足の振り上げ','m','cm','両者同じ。'],
+ ['yawAmp','骨盤回旋の振れ（片側）','°','cm','両者同じ。'],
+ ['yawPhase','骨盤回旋の位相','°','cs','中心軸は振り出す脚の側の骨盤が前へ、二軸は着地足の側の骨盤が前へ（木寺, namiashi.net）。0°＝踵接地で前の脚の側が最も前、−90°＝立脚中期に立脚側が最も前、という置き方は推論。'],
+ ['shCouple','肩と骨盤の連動','','cs','中心軸は肩を骨盤と逆に動かし、二軸は肩と骨盤がほぼ一致（木寺, namiashi.net、2003年の動作分析に言及）。−1＝逆向き同量、+1＝同じ向き同量。'],
+ ['armAmp','腕振りの振れ（片側）','°','ci','なみあしの腕振りは参照ページに記述なし。中心軸では骨盤回旋の補償として腕を振る、という記述から小さく置いた。'],
+ ['latAmp','骨盤の左右移動（片側）','m','cs','重心を左右に移しかえて進む（木寺, namiashi.net）。数値は設定。'],
+ ['vertAmp','腰の上下動','m','cs','上下動は抑えるのでなく荷重と抜重で使う（木寺, namiashi.net）。形と数値は設定で、両者同じにした。'],
+ ['baseDrop','腰の高さを下げる量','m','ci','膝を曲げて沈む「沈み込み抜重」の記述（namiashi.net）から、膝にゆとりを持たせた。数値は設定。'],
+ ['cycles','歩行周期の数','','cm','表示用。']];
+function gaitTable(){
+  var h='<tr><th>項目</th><th class="r">① なみあし</th><th class="r">② 普通</th><th>根拠</th></tr>';
+  GROWS.forEach(function(r){
+    var chip={cs:'<span class="chip cs">検索</span>',cm:'<span class="chip cm">設定</span>',ci:'<span class="chip ci">推論</span>'}[r[3]];
+    h+='<tr><td>'+r[1]+(r[2]?'（'+r[2]+'）':'')+'</td>'+['namiashi','normal'].map(function(k){return '<td class="r"><input class="num" style="width:4.6em;font:inherit;font-size:12px;padding:1px 3px;border:1px solid var(--line);border-radius:3px;background:var(--bg);color:var(--fg)" id="g_'+k+'_'+r[0]+'" type="number" step="any" value="'+Core.GAIT[k][r[0]]+'" aria-label="'+r[1]+' '+(k==='normal'?'普通':'なみあし')+'"></td>';}).join('')+'<td>'+chip+' '+r[4]+'</td></tr>';});
+  $('gtbl').innerHTML=h;
+}
+var GRES={};
+function genGait(k){
+  var G=Object.assign({},Core.GAIT[k]); GROWS.forEach(function(r){var v=parseFloat($('g_'+k+'_'+r[0]).value); if(!isNaN(v)) G[r[0]]=v;});
+  G.cycles=Math.max(1,Math.min(8,Math.round(G.cycles)));
+  S.raw={frames:Core.gaitFrames(G,body(),60),fs:60,notes:{head:'VERT/CERV（模型）',hand:'MET3（模型）'},hipCentered:false,synthetic:true,gait:G,name:(k==='namiashi'?'① ':'② ')+G.name+'（仮置き）'};
+  $('fsIn').value=60; analyzeData();
+  GRES[k]={name:S.raw.name,sum:Core.summarize(S.res)}; compareTable();
+  if(!follow){follow=true;$('follow').setAttribute('aria-pressed',true);$('follow').classList.add('on');}
+  cam('side'); S.idx=0; render();
+  $('dataMsg').className='msg'; $('dataMsg').textContent='「'+S.raw.name+'」を生成しました。60 Hz、'+G.cycles+' 周期。本模型の合成で、実測ではありません。「▶ 再生」で動きます。';
+}
+$('gNami').addEventListener('click',function(){genGait('namiashi');});
+$('gNorm').addEventListener('click',function(){genGait('normal');});
+function compareTable(){
+  var ks=['namiashi','normal'].filter(function(k){return GRES[k];});
+  var rows=[['速さ','m/s',function(s){return s.speed.toFixed(2);}],
+    ['重心の上下の幅','cm',function(s){return (s.comVert*100).toFixed(1);}],
+    ['重心の左右の幅','cm',function(s){return (s.comLat*100).toFixed(1);}],
+    ['骨盤の回旋の幅','°',function(s){return s.pelvYaw.toFixed(1);}],
+    ['肩の線の回旋の幅','°',function(s){return s.shYaw.toFixed(1);}],
+    ['体幹のねじれの幅','°',function(s){return s.twist.toFixed(1);}],
+    ['両脚支持の割合','%',function(s){return s.dsPct.toFixed(1);}],
+    ['左右MoSの平均','cm',function(s){return s.mosMLmean==null?'—':(s.mosMLmean*100).toFixed(1);}],
+    ['左右MoSの最小','cm',function(s){return s.mosMLmin==null?'—':(s.mosMLmin*100).toFixed(1);}],
+    ['MoS（2次元）の最小','cm',function(s){return s.mosMin==null?'—':(s.mosMin*100).toFixed(1);}]];
+  var h='<tr><th>指標</th>'+ks.map(function(k){return '<th class="r">'+(k==='namiashi'?'①':'②')+'</th>';}).join('')+'</tr>';
+  rows.forEach(function(r){h+='<tr><td>'+r[0]+'（'+r[1]+'）</td>'+ks.map(function(k){return '<td class="r num">'+r[2](GRES[k].sum)+'</td>';}).join('')+'</tr>';});
+  h+='<tr><td colspan="3" class="sub">回旋とねじれの幅は入力をそのまま映した確認用。重心の左右の幅と MoS は、入力から計算で出てきた結果。どちらも合成データの値で、実際のなみあし歩行の測定値ではない。</td></tr>';
+  $('cmp').innerHTML=h;
+}
+
+/* ---------- tabs & inputs ---------- */
+document.querySelectorAll('[role=tab]').forEach(function(b){b.addEventListener('click',function(){
+  document.querySelectorAll('[role=tab]').forEach(function(x){var on=x===b;x.setAttribute('aria-selected',on);$('p-'+x.dataset.p).hidden=!on;});});});
+['sex','H','M'].forEach(function(id){$(id).addEventListener('change',function(){
+  S.sex=$('sex').value; S.H=Math.max(1.2,Math.min(2.2,+$('H').value||1.7)); S.M=Math.max(20,+$('M').value||65);
+  basisTables();
+  if(S.mode==='data'&&S.raw){ if(S.raw.gait){ S.raw.frames=Core.gaitFrames(S.raw.gait,body(),60); } else if(S.raw.synthetic){ var smp=SAMPLES.filter(function(s){return s[0]===S.raw.name;})[0]; if(smp) S.raw.frames=Core.synth(smp[1],body(),30);} analyzeData(); }
+  else render();});});
+['lap','lml'].forEach(function(id){$(id).addEventListener('change',function(){ if(S.mode==='data'&&S.raw) analyzeData(); else render(); });});
+
+/* theme */
+var mq=window.matchMedia('(prefers-color-scheme: dark)'); if(mq.addEventListener) mq.addEventListener('change',applyTheme);
+new MutationObserver(applyTheme).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+
+buildSliders(); syncSliders(); buildPresets(); buildSamples(); basisTables(); gaitTable(); resize(); applyTheme();
+})();
+</script>
+
+</body>
+</html>
